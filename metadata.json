@@ -1,0 +1,6 @@
+{
+  "name": "Student ID Card",
+  "description": "Generate digital student ID cards based on selected colleges with secure passcode access.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

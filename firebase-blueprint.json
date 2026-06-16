@@ -1,0 +1,29 @@
+{
+  "entities": {
+    "student": {
+      "title": "Student",
+      "description": "A student record representing a digital ID pass.",
+      "type": "object",
+      "properties": {
+        "rtoId": { "type": "string", "description": "ID of the RTO" },
+        "studentNumber": { "type": "string", "description": "Student ID number" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "status": { "type": "string" },
+        "campus": { "type": "string" },
+        "commencedDate": { "type": "string" },
+        "dob": { "type": "string" },
+        "photoData": { "type": "string", "description": "base64 photo data to bypass storage configuration complexity" },
+        "createdAt": { "type": "number", "description": "Timestamp" },
+        "createdBy": { "type": "string", "description": "User ID of creator" }
+      },
+      "required": ["rtoId", "studentNumber", "firstName", "lastName", "createdBy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "students/{studentId}": {
+      "schema": { "$ref": "#/entities/student" },
+      "description": "Student pass records"
+    }
+  }
+}
