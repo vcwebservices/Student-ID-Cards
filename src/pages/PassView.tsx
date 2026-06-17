@@ -4,6 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Student } from '../types';
 import { StudentCard } from '../components/StudentCard';
+import { RTOS } from '../lib/rtoConfig';
 
 export function PassView() {
   const { studentId } = useParams<{ studentId: string }>();
