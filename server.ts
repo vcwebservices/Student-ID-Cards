@@ -7,7 +7,10 @@ const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy");
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  console.log(`[STARTUP] Starting server in ${isProduction ? "PRODUCTION" : "DEVELOPMENT"} mode on port ${PORT}`);
 
   app.use(express.json());
 
@@ -81,24 +84,37 @@ async function startServer() {
     }
   });
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    // Note: express v4 uses '*' and v5 uses '*all' or '/(.*)' but here we are using v4.21.2
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
+  try {
+    if (isProduction) {
+      console.log("[STARTUP] Setting up static file serving...");
+      // Note: express v4 uses '*' and v5 uses '*all' or '/(.*)' but here we are using v4.21.2
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+      console.log("[STARTUP] Static file serving ready");
+    } else {
+      console.log("[STARTUP] Setting up Vite middleware...");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+      console.log("[STARTUP] Vite middleware ready");
+    }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+    console.log("[STARTUP] Attempting to listen on 0.0.0.0:" + PORT);
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`[STARTUP] ✓ Server successfully listening on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("[STARTUP] FATAL ERROR:", error);
+    process.exit(1);
+  }
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error("[STARTUP] FATAL ERROR in startServer:", error);
+  process.exit(1);
+});
