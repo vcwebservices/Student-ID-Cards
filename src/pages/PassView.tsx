@@ -13,7 +13,34 @@ export function PassView() {
   const [error, setError] = useState('');
 
   const [added, setAdded] = useState(false);
-  const [showPrompt, setShowPrompt] = useState(true);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [osDetected, setOsDetected] = useState<'ios' | 'android' | 'desktop'>('desktop');
+  const [autoAdding, setAutoAdding] = useState(false);
+  const [showSimulatedSuccess, setShowSimulatedSuccess] = useState(false);
+
+  useEffect(() => {
+    // Check OS
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream;
+    const isAndroid = /android/i.test(userAgent);
+
+    if (isIOS) setOsDetected('ios');
+    else if (isAndroid) setOsDetected('android');
+    else setOsDetected('desktop');
+
+    // Auto-trigger flow for mobile
+    if (isIOS || isAndroid) {
+      setAutoAdding(true);
+      const timer = setTimeout(() => {
+        setAutoAdding(false);
+        setAdded(true);
+        setShowSimulatedSuccess(true);
+      }, 2500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowPrompt(true); // Show manual prompt for desktop
+    }
+  }, []);
 
   useEffect(() => {
     async function loadStudent() {
@@ -36,10 +63,15 @@ export function PassView() {
     loadStudent();
   }, [studentId]);
 
-  const handleAdd = () => {
-    alert("In a production environment, this would generate and download a native .pkpass file for Apple Wallet, or redirect to the Google Wallet save link.");
-    setAdded(true);
+  const handleAdd = (os: 'ios' | 'android') => {
+    setAutoAdding(true);
     setShowPrompt(false);
+    setTimeout(() => {
+      setAutoAdding(false);
+      setAdded(true);
+      setShowSimulatedSuccess(true);
+      setOsDetected(os);
+    }, 1500);
   };
 
   if (loading) {
@@ -58,7 +90,7 @@ export function PassView() {
         </button>
         <span className="font-semibold text-sm tracking-wide mix-blend-screen">{student.rtoId.replace('rto_','').toUpperCase()} Student ID Card</span>
         <button 
-          onClick={handleAdd}
+          onClick={() => handleAdd('ios')}
           className="px-4 py-1.5 rounded-full bg-blue-400 text-black font-semibold text-sm transition-colors active:bg-blue-500">
           {added ? 'Added' : 'Add'}
         </button>
@@ -74,8 +106,40 @@ export function PassView() {
         )}
       </div>
 
+      {/* Auto Adding Overlay */}
+      {autoAdding && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex flex-col items-center justify-center animate-in fade-in duration-300">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-white font-medium text-lg">
+            Opening {osDetected === 'ios' ? 'Apple Wallet' : osDetected === 'android' ? 'Google Wallet' : 'Wallet'}...
+          </p>
+        </div>
+      )}
+
+      {/* Simulated Success Message */}
+      {showSimulatedSuccess && (
+        <div className="fixed top-8 left-1/2 -translate-x-1/2 bg-[#1c1c1e] text-white px-6 py-4 rounded-2xl shadow-2xl z-[70] border border-white/10 animate-in slide-in-from-top flex flex-col items-center max-w-[340px] text-center w-full mt-4">
+          <div className="w-12 h-12 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center mb-3">
+             <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-6 h-6" strokeWidth={2.5}>
+               <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+             </svg>
+          </div>
+          <h3 className="font-semibold text-lg mb-1">Pass Added</h3>
+          <p className="text-sm text-gray-400">
+            [AI Studio Simulated Save]<br/>
+            In production, {osDetected === 'ios' ? 'a .pkpass file would be downloaded.' : osDetected === 'android' ? 'you would be redirected to the Google Wallet save link.' : 'the appropriate wallet link would be opened.'}
+          </p>
+          <button 
+             onClick={() => setShowSimulatedSuccess(false)}
+             className="mt-4 w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Mock Add to Wallet Prompt */}
-      {showPrompt && !added && (
+      {showPrompt && !added && !autoAdding && (
         <div className="fixed bottom-0 left-0 right-0 p-6 bg-[#1c1c1e] rounded-t-3xl border-t border-white/10 z-50 animate-in slide-in-from-bottom flex flex-col items-center shadow-2xl">
           <div className="w-12 h-1.5 bg-white/20 rounded-full mb-6"></div>
           <h3 className="text-white font-semibold text-xl mb-2 text-center">Add to Wallet</h3>
@@ -84,7 +148,7 @@ export function PassView() {
           </p>
           <div className="w-full max-w-sm flex flex-col gap-3">
             <button 
-              onClick={handleAdd}
+              onClick={() => handleAdd('ios')}
               className="w-full py-3.5 rounded-xl bg-white text-black font-semibold text-base flex justify-center items-center gap-2 hover:bg-gray-200 transition-colors"
             >
               <svg viewBox="0 0 384 512" className="w-[18px] h-[18px]" fill="currentColor">
@@ -93,7 +157,7 @@ export function PassView() {
               Add to Apple Wallet
             </button>
             <button 
-              onClick={handleAdd}
+              onClick={() => handleAdd('android')}
               className="w-full py-3.5 rounded-xl bg-[#2a2a2c] text-white font-semibold text-base border border-white/5 flex justify-center items-center gap-2 hover:bg-[#3a3a3c] transition-colors"
             >
               <svg viewBox="0 0 576 512" className="w-5 h-5 text-[#3DDC84]" fill="currentColor">
