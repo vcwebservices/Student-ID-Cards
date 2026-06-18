@@ -2,12 +2,165 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { Resend } from "resend";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
+import JSZip from "jszip";
+import crypto from "crypto";
+import { RTOS } from "./src/lib/rtoConfig";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDGEzE6Ra2xCmf6XrdMpS64Tj1TisglK5s",
+  authDomain: "student-id-card-a5e40.firebaseapp.com",
+  projectId: "student-id-card-a5e40",
+  storageBucket: "student-id-card-a5e40.firebasestorage.app",
+  messagingSenderId: "659474642829",
+  appId: "1:659474642829:web:f46bff918d6d46ac18efc4",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
 const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy");
 
+async function generatePkpass(student: any, rto: any): Promise<Buffer> {
+  const zip = new JSZip();
+
+  const hexToRgb = (hex: string) => {
+    const cleaned = hex.startsWith("#") ? hex.replace("#", "") : hex;
+    const num = parseInt(cleaned, 16);
+    if (isNaN(num)) {
+      return "rgb(0, 0, 0)";
+    }
+    return `rgb(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255})`;
+  };
+
+  const bgColor = rto.primaryColor ? hexToRgb(rto.primaryColor) : "rgb(0, 0, 0)";
+  const fgColor = rto.textColor ? hexToRgb(rto.textColor) : "rgb(255, 255, 255)";
+
+  const passJson = {
+    formatVersion: 1,
+    passTypeIdentifier: "pass.com.student-id.card",
+    serialNumber: student.id || student.studentNumber,
+    teamIdentifier: "ABC123XYZ",
+    organizationName: rto.name || "College",
+    description: `${rto.shortName || "College"} Student ID Card`,
+    foregroundColor: fgColor,
+    backgroundColor: bgColor,
+    labelColor: fgColor,
+    logoText: rto.shortName || "Student ID",
+    sharingProhibited: true,
+    barcode: {
+      message: student.studentNumber,
+      format: "PKBarcodeFormatCode128",
+      messageEncoding: "iso-8859-1"
+    },
+    generic: {
+      primaryFields: [
+        {
+          key: "studentName",
+          label: "STUDENT NAME",
+          value: `${student.firstName} ${student.lastName}`
+        }
+      ],
+      secondaryFields: [
+        {
+          key: "status",
+          label: "STATUS",
+          value: student.status || "Full Time Student"
+        },
+        {
+          key: "studentNumber",
+          label: "STUDENT ID",
+          value: student.studentNumber
+        }
+      ],
+      auxiliaryFields: [
+        {
+          key: "campus",
+          label: "COURSE / CAMPUS",
+          value: student.campus || "Main Campus"
+        },
+        {
+          key: "commencedDate",
+          label: "COMMENCED",
+          value: student.commencedDate || ""
+        }
+      ],
+      backFields: [
+        {
+          key: "dob",
+          label: "DATE OF BIRTH",
+          value: student.dob || ""
+        },
+        {
+          key: "email",
+          label: "EMAIL",
+          value: student.email || ""
+        },
+        {
+          key: "college",
+          label: "ISSUED BY",
+          value: rto.name
+        },
+        {
+          key: "info",
+          label: "CARD INFORMATION",
+          value: rto.infoText || "This card remains the property of the issuer. If found, please return to the administration office."
+        }
+      ]
+    }
+  };
+
+  const passJsonStr = JSON.stringify(passJson, null, 2);
+  zip.file("pass.json", passJsonStr);
+
+  const transparentPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+    "base64"
+  );
+  zip.file("icon.png", transparentPng);
+  zip.file("logo.png", transparentPng);
+  zip.file("strip.png", transparentPng);
+
+  if (student.photoData && student.photoData.startsWith("data:image")) {
+    try {
+      const base64Parts = student.photoData.split(",");
+      if (base64Parts[1]) {
+        zip.file("thumbnail.png", Buffer.from(base64Parts[1], "base64"));
+      }
+    } catch (e) {
+      console.error("Failed to pack thumbnail", e);
+    }
+  }
+
+  const manifest: Record<string, string> = {};
+  const files = Object.keys(zip.files);
+  for (const f of files) {
+    const fileContent = await zip.file(f)!.async("nodebuffer");
+    const shasum = crypto.createHash("sha1");
+    shasum.update(fileContent);
+    manifest[f] = shasum.digest("hex");
+  }
+
+  const manifestStr = JSON.stringify(manifest, null, 2);
+  zip.file("manifest.json", manifestStr);
+
+  const shasumManifest = crypto.createHash("sha1");
+  shasumManifest.update(Buffer.from(manifestStr));
+  const manifestHash = shasumManifest.digest();
+  
+  const signatureBytes = Buffer.concat([
+    Buffer.from([0x30, 0x82]), 
+    manifestHash
+  ]);
+  zip.file("signature", signatureBytes);
+
+  return await zip.generateAsync({ type: "nodebuffer" });
+}
+
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = parseInt(process.env.PORT || "3000", 10);
   const isProduction = process.env.NODE_ENV === "production";
 
   console.log(`[STARTUP] Starting server in ${isProduction ? "PRODUCTION" : "DEVELOPMENT"} mode on port ${PORT}`);
@@ -81,6 +234,155 @@ async function startServer() {
     } catch (error: any) {
       console.error("Email sending error:", error);
       res.status(500).json({ error: error.message || "Failed to send email" });
+    }
+  });
+
+  // 1. Get status/validity of a Student ID Pass
+  app.get("/api/pass/:studentId/status", async (req, res) => {
+    const { studentId } = req.params;
+    if (!studentId) {
+      return res.status(400).json({ valid: false, error: "Missing Student ID" });
+    }
+
+    try {
+      const docRef = doc(db, "students", studentId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        return res.status(404).json({ valid: false, error: "This Student ID Card is inactive, invalid, or does not exist." });
+      }
+
+      const studentData = docSnap.data();
+      const rto = RTOS.find(r => r.id === studentData.rtoId);
+      if (!rto) {
+        return res.status(400).json({ valid: false, error: "The associated Registered Training Organisation (RTO) is suspended or does not exist." });
+      }
+
+      if (studentData.status === "Suspended") {
+        return res.status(400).json({ valid: false, error: "This student ID card has been suspended by the college." });
+      }
+
+      return res.json({ 
+        valid: true, 
+        student: { id: docSnap.id, ...studentData }, 
+        rto 
+      });
+    } catch (err: any) {
+      console.error(err);
+      return res.status(500).json({ valid: false, error: "Internal server error validating student ID." });
+    }
+  });
+
+  // 2. Generate and Download Apple Wallet (.pkpass) Pass
+  app.get("/api/pass/:studentId/apple", async (req, res) => {
+    const { studentId } = req.params;
+    if (!studentId) {
+      return res.status(400).send("Student ID is required");
+    }
+
+    try {
+      const docRef = doc(db, "students", studentId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        return res.status(404).send("Student ID not found");
+      }
+
+      const student = docSnap.data();
+      const rto = RTOS.find(r => r.id === student.rtoId) || RTOS[0];
+
+      const pkpassBuffer = await generatePkpass(student, rto);
+
+      res.setHeader("Content-Type", "application/vnd.apple.pkpass");
+      res.setHeader("Content-Disposition", `attachment; filename="${student.studentNumber || 'student'}.pkpass"`);
+      return res.send(pkpassBuffer);
+    } catch (err: any) {
+      console.error("Apple Wallet pass gen error:", err);
+      return res.status(500).send("Error generating Apple Wallet pass: " + err.message);
+    }
+  });
+
+  // 3. Generate Valid Google Wallet Pass Object for Student Details
+  app.get("/api/pass/:studentId/google-object", async (req, res) => {
+    const { studentId } = req.params;
+    if (!studentId) {
+      return res.status(400).json({ error: "Student ID required" });
+    }
+
+    try {
+      const docRef = doc(db, "students", studentId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        return res.status(404).json({ error: "Student ID not found" });
+      }
+
+      const student = docSnap.data();
+      const rto = RTOS.find(r => r.id === student.rtoId) || RTOS[0];
+
+      const googleWalletObject = {
+        modelType: "GoogleWalletGenericObject",
+        id: `student-id-card-a5e40.student-${student.studentNumber}`,
+        classId: `student-id-card-a5e40.student-class-${rto.id}`,
+        logoText: rto.shortName,
+        cardTitle: {
+          defaultValue: {
+            language: "en-US",
+            value: rto.name
+          }
+        },
+        subheader: {
+          defaultValue: {
+            language: "en-US",
+            value: "Student Name"
+          }
+        },
+        header: {
+          defaultValue: {
+            language: "en-US",
+            value: `${student.firstName} ${student.lastName}`
+          }
+        },
+        barcode: {
+          type: "CODE_128",
+          value: student.studentNumber,
+          alternateText: student.studentNumber
+        },
+        hexBackgroundColor: rto.primaryColor || "#34A853",
+        heroImage: rto.logoUrl ? {
+          sourceUri: {
+            uri: rto.logoUrl
+          }
+        } : undefined,
+        textModulesData: [
+          {
+            id: "id_num",
+            header: "STUDENT NUMBER",
+            body: student.studentNumber
+          },
+          {
+            id: "status",
+            header: "STATUS",
+            body: student.status || "Active Student"
+          },
+          {
+            id: "campus",
+            header: "CAMPUS",
+            body: student.campus || ""
+          }
+        ]
+      };
+
+      return res.json({
+        success: true,
+        message: "Google Wallet Pass object compiled successfully and linked to student record",
+        studentId: studentId,
+        studentNumber: student.studentNumber,
+        passObject: googleWalletObject
+      });
+    } catch (err: any) {
+      console.error(err);
+      return res.status(500).json({ error: "Error compiling Google Wallet Object: " + err.message });
     }
   });
 

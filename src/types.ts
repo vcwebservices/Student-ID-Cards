@@ -4,6 +4,7 @@ export interface Student {
   studentNumber: string;
   firstName: string;
   lastName: string;
+  email?: string;
   status: string;
   campus: string;
   commencedDate: string;
@@ -11,3 +12,4 @@ export interface Student {
   photoData: string; // Base64
   createdAt: number;
 }
+
