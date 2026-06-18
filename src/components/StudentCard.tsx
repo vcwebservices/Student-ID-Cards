@@ -1,5 +1,5 @@
 import React from 'react';
-import Barcode from 'react-barcode';
+import QRCode from 'react-qr-code';
 import { cn } from '../lib/utils';
 import { RTOS } from '../lib/rtoConfig';
 import { Student } from '../types';
@@ -83,22 +83,21 @@ export function StudentCard({ student, className, isViewMode = false }: StudentC
         </div>
       </div>
 
-      {/* Barcode Section */}
+      {/* Barcode Section (QR Code) */}
       <div 
         className="p-6 pt-4 mt-auto"
         style={{ backgroundColor: 'color-mix(in srgb, currentColor 5%, transparent)' }}
       >
         <div className="bg-white rounded-xl p-4 flex flex-col items-center justify-center text-black shadow-sm" style={{ border: '1px solid color-mix(in srgb, currentColor 10%, transparent)' }}>
-          <Barcode 
-            value={student.studentNumber} 
-            displayValue={true} 
-            height={50} 
-            width={1.6} 
-            margin={0}
-            fontSize={12}
-            textMargin={8}
-            background="transparent"
-          />
+          <div className="w-[110px] h-[110px]">
+            <QRCode 
+              value={student.studentNumber} 
+              size={110}
+              style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+              viewBox={`0 0 256 256`}
+            />
+          </div>
+          <p className="font-mono text-xs mt-2.5 tracking-widest font-bold text-gray-800">{student.studentNumber}</p>
         </div>
       </div>
     </div>

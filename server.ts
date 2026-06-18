@@ -59,7 +59,7 @@ function generateGoogleWalletJWT(
           id: objectId,
           classId: classId,
           barcode: genericObject.barcode || {
-            type: "CODE_128",
+            type: "QR_CODE",
             value: studentId,
             alternateText: studentId
           }
@@ -106,9 +106,16 @@ async function generatePkpass(student: any, rto: any): Promise<Buffer> {
     labelColor: fgColor,
     logoText: rto.shortName || "Student ID",
     sharingProhibited: true,
+    barcodes: [
+      {
+        message: student.studentNumber,
+        format: "PKBarcodeFormatQR",
+        messageEncoding: "iso-8859-1"
+      }
+    ],
     barcode: {
       message: student.studentNumber,
-      format: "PKBarcodeFormatCode128",
+      format: "PKBarcodeFormatQR",
       messageEncoding: "iso-8859-1"
     },
     generic: {
@@ -446,7 +453,7 @@ async function startServer() {
           }
         },
         barcode: {
-          type: "CODE_128",
+          type: "QR_CODE",
           value: student.studentNumber,
           alternateText: student.studentNumber
         },
@@ -547,7 +554,7 @@ async function startServer() {
           }
         },
         barcode: {
-          type: "CODE_128",
+          type: "QR_CODE",
           value: student.studentNumber,
           alternateText: student.studentNumber
         },
