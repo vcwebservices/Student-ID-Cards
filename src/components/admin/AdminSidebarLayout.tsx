@@ -1,9 +1,15 @@
 import React from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Users, CreditCard, Settings, LogOut, ChevronRight } from 'lucide-react';
 import { RTOS } from '../../lib/rtoConfig';
 
 export function AdminSidebarLayout() {
+  const navigate = useNavigate();
+
+  const handleSignOut = () => {
+    navigate('/');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans">
       {/* Sidebar */}
@@ -76,7 +82,10 @@ export function AdminSidebarLayout() {
         </nav>
 
         <div className="p-4 border-t border-gray-200">
-          <button className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-700 transition-colors">
+          <button 
+            onClick={handleSignOut}
+            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-700 transition-colors"
+          >
             <LogOut className="w-5 h-5" />
             Sign Out
           </button>
