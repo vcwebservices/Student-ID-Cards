@@ -273,63 +273,68 @@ export function CollegeDetails() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {processedStudents.length > 0 ? (
-                  processedStudents.map((student) => (
-                    <tr key={student.id} className="hover:bg-blue-50/50 transition-colors group">
-                      <td className="py-3 px-4 font-mono text-gray-900">{student.studentNumber}</td>
-                      <td className="py-3 px-4 font-medium text-gray-900">
-                        {student.firstName} {student.lastName}
-                      </td>
-                      <td className="py-3 px-4 text-gray-500">{student.email || <span className="text-gray-300 italic">Not provided</span>}</td>
-                      <td className="py-3 px-4 text-gray-500 truncate max-w-[150px]">{student.campus}</td>
-                      <td className="py-3 px-4 text-gray-500">
-                        {format(new Date(student.createdAt), 'MMM d, yyyy')}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          student.status === 'Deactivated' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'
-                        }`}>
-                          {student.status === 'Deactivated' ? 'Deactivated' : 'Active'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 relative text-center">
-                        <button 
-                          onClick={() => setMenuOpenId(menuOpenId === student.id ? null : student.id!)}
-                          className="p-1.5 rounded-md hover:bg-gray-200 text-gray-500 transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        
-                        {menuOpenId === student.id && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)}></div>
-                            <div className="absolute right-8 top-full mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                              <Link 
-                                to={`/pass/${student.id}`}
-                                target="_blank"
-                                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <Eye className="w-4 h-4" /> View Live Card
-                              </Link>
-                              <button className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left">
-                                <Download className="w-4 h-4" /> Download .pkpass
-                              </button>
-                              <button className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left">
-                                <RefreshCw className="w-4 h-4" /> Reissue Card
-                              </button>
-                              {student.status !== 'Deactivated' && (
-                                <button 
-                                  onClick={() => handleDeactivate(student.id!)}
-                                  className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left border-t border-gray-100"
+                  processedStudents.map((student, index) => {
+                    const isLastTwo = processedStudents.length > 2 && index >= processedStudents.length - 2;
+                    return (
+                      <tr key={student.id} className="hover:bg-blue-50/50 transition-colors group">
+                        <td className="py-3 px-4 font-mono text-gray-900">{student.studentNumber}</td>
+                        <td className="py-3 px-4 font-medium text-gray-900">
+                          {student.firstName} {student.lastName}
+                        </td>
+                        <td className="py-3 px-4 text-gray-500">{student.email || <span className="text-gray-300 italic">Not provided</span>}</td>
+                        <td className="py-3 px-4 text-gray-500 truncate max-w-[150px]">{student.campus}</td>
+                        <td className="py-3 px-4 text-gray-500">
+                          {format(new Date(student.createdAt), 'MMM d, yyyy')}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            student.status === 'Deactivated' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'
+                          }`}>
+                            {student.status === 'Deactivated' ? 'Deactivated' : 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 relative text-center">
+                          <button 
+                            onClick={() => setMenuOpenId(menuOpenId === student.id ? null : student.id!)}
+                            className="p-1.5 rounded-md hover:bg-gray-200 text-gray-500 transition-colors"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          
+                          {menuOpenId === student.id && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)}></div>
+                              <div className={`absolute right-8 w-48 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${
+                                isLastTwo ? 'bottom-full mb-1 origin-bottom-right' : 'top-full mt-1 origin-top-right'
+                              }`}>
+                                <Link 
+                                  to={`/pass/${student.id}`}
+                                  target="_blank"
+                                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                 >
-                                  <Ban className="w-4 h-4" /> Deactivate
+                                  <Eye className="w-4 h-4" /> View Live Card
+                                </Link>
+                                <button className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left">
+                                  <Download className="w-4 h-4" /> Download .pkpass
                                 </button>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                                <button className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left">
+                                  <RefreshCw className="w-4 h-4" /> Reissue Card
+                                </button>
+                                {student.status !== 'Deactivated' && (
+                                  <button 
+                                    onClick={() => handleDeactivate(student.id!)}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left border-t border-gray-100"
+                                  >
+                                    <Ban className="w-4 h-4" /> Deactivate
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-gray-500">
