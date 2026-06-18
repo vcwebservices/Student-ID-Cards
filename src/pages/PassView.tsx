@@ -105,17 +105,33 @@ export function PassView() {
   const triggerAndroidAdd = async (id: string) => {
     setAddingToWallet(true);
     try {
-      const response = await fetch(`/api/pass/${id}/google-object`);
-      if (response.ok) {
-        const data = await response.json();
-        setGoogleWalletObject(data);
-        
-        setTimeout(() => {
-          setAddingToWallet(false);
-          setShowGoogleWalletSimulator(true);
-        }, 1200);
-      } else {
+      const [objRes, urlRes] = await Promise.all([
+        fetch(`/api/pass/${id}/google-object`),
+        fetch(`/api/pass/${id}/google-jwt`)
+      ]);
+
+      if (!objRes.ok) {
         throw new Error('Failed to generate Google Wallet object payload.');
+      }
+
+      const objData = await objRes.json();
+      const urlData = urlRes.ok ? await urlRes.json() : { success: false, saveUrl: null, message: null };
+
+      setGoogleWalletObject({
+        ...objData,
+        configured: !!urlData.saveUrl,
+        saveUrl: urlData.saveUrl,
+        message: urlData.message || (urlData.saveUrl ? "Google Wallet signed link generated successfully!" : "Developer environment keys not configured yet.")
+      });
+      
+      setAddingToWallet(false);
+
+      if (urlData.saveUrl) {
+        // Direct signed JWT link is ready! Send them directly to Google Wallet import page.
+        window.open(urlData.saveUrl, '_blank');
+      } else {
+        // No environment variables found; open helper simulation modal
+        setShowGoogleWalletSimulator(true);
       }
     } catch (err: any) {
       console.error(err);
@@ -519,9 +535,27 @@ export function PassView() {
               <h3 className="font-bold text-lg">Google Wallet Integration</h3>
             </div>
 
-            <p className="text-xs text-gray-300 mb-6 font-medium leading-relaxed">
-              Below is the verified Google Wallet Class and Object metadata linking directly to this student profile record:
+            <p className="text-xs text-gray-300 mb-4 font-medium leading-relaxed">
+              Below is the verified Google Wallet Class and Object metadata. Currently running in <strong>Sandbox Mode</strong>.
             </p>
+
+            {/* Instruction container */}
+            <div className="bg-[#1a2130] border border-blue-900/40 p-3.5 rounded-2xl mb-4 text-left flex gap-2.5 text-[10.5px] leading-relaxed">
+              <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-blue-300 font-bold block mb-0.5">To enable direct Wallet imports:</strong>
+                <p className="text-gray-300">
+                  To import straight into their phone in one click, set up the Google Pay Developer credentials in your <code className="text-blue-200">.env</code> keys:
+                </p>
+                <div className="font-mono bg-black/40 p-2 rounded-lg border border-white/5 text-[9px] text-blue-305 mt-1.5 space-y-0.5">
+                  <div>GOOGLE_SERVICE_ACCOUNT_EMAIL=...</div>
+                  <div>GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY..."</div>
+                </div>
+                <p className="text-gray-400 mt-1.5">
+                  The backend's signed token system is fully implemented and will immediately sign the pass with RS256, allowing direct wallet import without downloads!
+                </p>
+              </div>
+            </div>
 
             {/* Generated Object JSON Card */}
             <div className="bg-[#0c0c0e] rounded-2xl p-4 border border-white/5 mb-6">
@@ -534,7 +568,7 @@ export function PassView() {
                   VALID
                 </span>
               </div>
-              <div className="max-h-[160px] overflow-y-auto text-left font-mono text-[10px] text-gray-300 leading-relaxed custom-scrollbar">
+              <div className="max-h-[120px] overflow-y-auto text-left font-mono text-[10px] text-gray-300 leading-relaxed custom-scrollbar">
                 <pre>{JSON.stringify(googleWalletObject.passObject, null, 2)}</pre>
               </div>
             </div>

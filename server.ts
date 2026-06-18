@@ -6,6 +6,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import JSZip from "jszip";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { RTOS } from "./src/lib/rtoConfig";
 
 const firebaseConfig = {
@@ -21,6 +22,62 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 
 const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy");
+
+// ============================================================================
+// GOOGLE WALLET JWT INTERFACE & FUNCTION
+// ============================================================================
+
+interface GoogleWalletJWTPayload {
+  iss: string;
+  aud: string;
+  typ: string;
+  origins: string[];
+  payload: {
+    genericObjects: any[];
+  };
+}
+
+function generateGoogleWalletJWT(
+  studentId: string,
+  genericObject: any,
+  walletKey: any,
+  issuerId: string,
+  classId: string,
+  origin: string
+): string {
+  const objectId = `${issuerId}.student-${studentId}`;
+
+  const payload: GoogleWalletJWTPayload = {
+    iss: walletKey.client_email,
+    aud: "google",
+    typ: "savetowallet",
+    origins: origin ? [origin] : [],
+    payload: {
+      genericObjects: [
+        {
+          ...genericObject,
+          id: objectId,
+          classId: classId,
+          barcode: genericObject.barcode || {
+            type: "CODE_128",
+            value: studentId,
+            alternateText: studentId
+          }
+        }
+      ]
+    }
+  };
+
+  const signedJwt = jwt.sign(payload, walletKey.private_key, {
+    algorithm: "RS256"
+  });
+
+  return signedJwt;
+}
+
+// ============================================================================
+// APPLE WALLET PKPASS GENERATION
+// ============================================================================
 
 async function generatePkpass(student: any, rto: any): Promise<Buffer> {
   const zip = new JSZip();
@@ -158,6 +215,10 @@ async function generatePkpass(student: any, rto: any): Promise<Buffer> {
   return await zip.generateAsync({ type: "nodebuffer" });
 }
 
+// ============================================================================
+// SERVER INITIALIZATION & ROUTES
+// ============================================================================
+
 async function startServer() {
   const app = express();
   const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -167,6 +228,10 @@ async function startServer() {
 
   app.use(express.json());
 
+  // ========================================================================
+  // EMAIL SENDING ENDPOINT
+  // ========================================================================
+
   app.post("/api/send-email", async (req, res) => {
     const { studentName, studentEmail, rtoName, rtoDomain, passUrl } = req.body;
 
@@ -174,9 +239,6 @@ async function startServer() {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Since we likely don't have a configured domain on resend for the RTOs, resend requires verifying the domain.
-    // Usually out of the box you can only send from 'onboarding@resend.dev' to the registered email.
-    // For this demonstration, we'll try to send it, and catch any errors. The user specified 'no-reply@myvc.com.au'
     const fromEmail = "no-reply@myvc.com.au";
     const supportEmail = `studentsupport@${rtoDomain || "myvc.com.au"}`;
     
@@ -237,7 +299,10 @@ async function startServer() {
     }
   });
 
-  // 1. Get status/validity of a Student ID Pass
+  // ========================================================================
+  // 1. PASS STATUS/VALIDITY ENDPOINT
+  // ========================================================================
+
   app.get("/api/pass/:studentId/status", async (req, res) => {
     const { studentId } = req.params;
     if (!studentId) {
@@ -273,7 +338,10 @@ async function startServer() {
     }
   });
 
-  // 2. Generate and Download Apple Wallet (.pkpass) Pass
+  // ========================================================================
+  // 2. APPLE WALLET PASS GENERATION
+  // ========================================================================
+
   app.get("/api/pass/:studentId/apple", async (req, res) => {
     const { studentId } = req.params;
     if (!studentId) {
@@ -302,7 +370,142 @@ async function startServer() {
     }
   });
 
-  // 3. Generate Valid Google Wallet Pass Object for Student Details
+  // ========================================================================
+  // 3. GOOGLE WALLET JWT GENERATION (NEW - SIGNED SAVE LINK)
+  // ========================================================================
+
+  app.get("/api/pass/:studentId/google-jwt", async (req, res) => {
+    const { studentId } = req.params;
+    if (!studentId) {
+      return res.status(400).json({ error: "Student ID required" });
+    }
+
+    try {
+      // 1. Get Wallet Key: Prefer environment variable, fallback to user provided service account
+      let walletKey: any = null;
+      if (process.env.GOOGLE_WALLET_KEY_JSON) {
+        try {
+          walletKey = JSON.parse(process.env.GOOGLE_WALLET_KEY_JSON);
+        } catch (e) {
+          console.error("[GOOGLE_WALLET] Failed to parse GOOGLE_WALLET_KEY_JSON env var:", e);
+        }
+      }
+
+      if (!walletKey) {
+        console.log("[GOOGLE_WALLET] GOOGLE_WALLET_KEY_JSON not set or failed to parse. Using user-provided fallback key.");
+        walletKey = {
+          type: "service_account",
+          project_id: "student-id-card-a5e40",
+          private_key_id: "de8f85b939af18300de21c1c8d150a63a6da8f44",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDJNKpn/Zy2KfnD\nE47zBcVrawo4bujNjfP32OZWfZyw82prCRCmuWRR1bwcFNT7cZGrF7L72XaAVxyI\nPO4CCcnd4egzZHaJRiEzZgRgSHnwK/mhqZGyxtUtAFc2M6R4VKiQZPlPt16g/ll7\nAvxacORJQVG6MSx/7mGE4b7xWaVYsPwUE+Zc5vp7R0Aw4I85ck66u3ZcYxERkbFf\nAMOKiBdtAGLUWQi/kU6WcEZPmOXXVfqNqmf9bTzxDwHGmrVbA9IOVi+YTVnQoqnb\niWYo7hVNH69zpXmf5UT/0302FScE4BPiq6DwlE8E4F70F3WrcnDionCYPSvWelS/\ngzYx73UtAgMBAAECggEANasnnQ9n4qs1pNQtuCMc8rcdhcoHrPSlU8H2RrHAvu5e\nv2gumdovqShywabI3L0BVvq+UjFCS59wy+I8tix4PQgKENNGTv1206ftmOUcKXUB\nZB6/70jcCeHiYWHLCBHE2KcmXR4TTqwpoAc+2rzsF6Ils510OjeSqYgxj10THqG1\ntyeyJkhYOm/H7RRzbktJ3yVdI+r5LaT52tOWnKJgeidNtIZ8i5JWSJpCWw2xmJYn\n2s+brE5lts8LKLgJWy/D/v7yGLXT5JlQL6UQ3jN9ElDItU8S2NmG73Rck8zFhPvc\nSQV65wr2hCEA7woa90WY4e81b9hiA4sJDvI/Cl2OfQKBgQDkyqkjcUeI4pkDigAj\nHJr88cxDNXqpaq/thiqhIc1QInEpfKE751OTTaj2QkR+qugQlRAswGWBov3AYqB8\nwJ94E5sRjD+/0E1fLSG9/gqKmGL67RvWQSjFYK+n6aqODKbn9bZ9y2qTJ1OzjhKX\n1X+bGWvth27jIHri78ThfBrUIwKBgQDhIi2wgzrUKCrA6Hp1xGDBYlEuiOvuy/Hd\n28YE4fEqmi9GhnIXadpTuC+NeyXadyJqTRRjdBAm5RWxdBkerdpLnd8GNf76QM9M\nRzOeGlXaQfS0ja/14M2TvlBO2GIVnL+W2LyrWIItoxEGfIqoifq9qKRtjVhTKwzk\n35WXFa8+bwKBgQCbdKBsNqI2flEduHzTXrJowBrcZ9AKoTUcnRcGGSOaGWzulYIw\nY8PDyPbPLMPBlXrNGZu97JSL+yWTvO/zFCbGvfuVdsgyGuUXkGDm6WBcP6KxgL5z\XB7JziJMY1bB4hLedXQkET0+82/KBvTXOffUePd+k5FivkUBQY1y8JKCJQKBgCpu\nhq3+DdhuuaAiMPKBULsiDKr4o38ecTefdHL3Ir0k0kQ4kshW6w9cZ5oC29+RFKt0\nW6Ni/KhYBP6tIw7lNX+LAb3p72S7UlbOFKx3yjaYt8ZP7hophJWUCQ7TOalZIcMM\nloK069QuJ8dRMdESMHAOmO8M9Ni4BHYerdMMAzuBAoGBAKU4lozcgR83RzaLHySa\n3WHv9eu5mFk8Fz3tYALSi0ayQueE5aYb+aR57RDdm3pRXYJrdP59ilqF+oaR6UVz\nnqjvLN/oHTf4/0D76KuE0Fv5mn3/duYWjJvKs/+MJrVb4csHoLaqmAEXtvPsQIfS\n3FOka76+VRP5Yn9Lz42o9/x+\n-----END PRIVATE KEY-----\n",
+          client_email: "659474642829-compute@developer.gserviceaccount.com",
+          client_id: "111020771945452713365",
+          auth_uri: "https://accounts.google.com/o/oauth2/auth",
+          token_uri: "https://oauth2.googleapis.com/token",
+          auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+          client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/659474642829-compute%40developer.gserviceaccount.com",
+          universe_domain: "googleapis.com"
+        };
+      }
+
+      const docRef = doc(db, "students", studentId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        return res.status(404).json({ error: "Student ID not found" });
+      }
+
+      const student = docSnap.data();
+      const rto = RTOS.find(r => r.id === student.rtoId) || RTOS[0];
+
+      // 2. Determine Issuer and Class IDs: Failover gracefully
+      const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID || "student-id-card-a5e40";
+      const classId = process.env.GOOGLE_WALLET_CLASS_ID || `student-id-card-a5e40.student-class-${rto.id}`;
+      const origin = process.env.WALLET_ORIGIN || (req.headers.origin as string) || `${req.protocol}://${req.get("host")}`;
+
+      // Build the generic object
+      const genericObject = {
+        id: `${issuerId}.student-${student.studentNumber}`,
+        classId: classId,
+        cardTitle: {
+          defaultValue: {
+            language: "en-US",
+            value: rto.name
+          }
+        },
+        subheader: {
+          defaultValue: {
+            language: "en-US",
+            value: `${student.firstName} ${student.lastName}`
+          }
+        },
+        header: {
+          defaultValue: {
+            language: "en-US",
+            value: student.studentNumber
+          }
+        },
+        barcode: {
+          type: "CODE_128",
+          value: student.studentNumber,
+          alternateText: student.studentNumber
+        },
+        hexBackgroundColor: rto.primaryColor || "#34A853",
+        logoText: rto.shortName,
+        heroImage: rto.logoUrl ? {
+          sourceUri: {
+            uri: rto.logoUrl
+          }
+        } : undefined,
+        textModulesData: [
+          {
+            id: "id_num",
+            header: "STUDENT NUMBER",
+            body: student.studentNumber
+          },
+          {
+            id: "status",
+            header: "STATUS",
+            body: student.status || "Active Student"
+          },
+          {
+            id: "campus",
+            header: "CAMPUS",
+            body: student.campus || ""
+          }
+        ]
+      };
+
+      // Generate the signed JWT
+      const signedJwt = generateGoogleWalletJWT(
+        studentId,
+        genericObject,
+        walletKey,
+        issuerId,
+        classId,
+        origin
+      );
+
+      // Build the save URL
+      const saveUrl = `https://pay.google.com/gp/v/save/${signedJwt}`;
+
+      console.log(`[GOOGLE_WALLET] JWT generated successfully for student: ${studentId}`);
+
+      return res.json({
+        success: true,
+        saveUrl: saveUrl,
+        message: "Google Wallet JWT generated successfully"
+      });
+    } catch (err: any) {
+      console.error("[GOOGLE_WALLET] Error generating JWT:", err);
+      return res.status(500).json({ error: "Error generating Google Wallet JWT: " + err.message });
+    }
+  });
+
+  // ========================================================================
+  // 4. LEGACY: GOOGLE WALLET OBJECT ENDPOINT (For backwards compatibility)
+  // ========================================================================
+
   app.get("/api/pass/:studentId/google-object", async (req, res) => {
     const { studentId } = req.params;
     if (!studentId) {
@@ -386,10 +589,13 @@ async function startServer() {
     }
   });
 
+  // ========================================================================
+  // STATIC FILE SERVING & VITE SETUP
+  // ========================================================================
+
   try {
     if (isProduction) {
       console.log("[STARTUP] Setting up static file serving...");
-      // Note: express v4 uses '*' and v5 uses '*all' or '/(.*)' but here we are using v4.21.2
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
       app.get('*', (req, res) => {
