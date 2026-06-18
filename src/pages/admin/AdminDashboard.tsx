@@ -76,11 +76,15 @@ export function AdminDashboard() {
   }
 
   // Chart Data: Cards by College
-  const cardsByCollege = RTOS.map(rto => ({
-    name: rto.shortName,
-    value: students.filter(s => s.rtoId === rto.id).length,
-    fill: rto.primaryColor
-  })).filter(c => c.value > 0);
+  const cardsByCollege = RTOS.map(rto => {
+    // If the primary color is white, use a beautiful dark navy color (#113f67) for dashboard charts so it doesn't blend into the white background
+    const chartFillColor = rto.primaryColor.toLowerCase() === '#ffffff' ? '#113f67' : rto.primaryColor;
+    return {
+      name: rto.shortName,
+      value: students.filter(s => s.rtoId === rto.id).length,
+      fill: chartFillColor
+    };
+  }).filter(c => c.value > 0);
 
   // Chart Data: Recent Activity (last 7 days maybe? Let's just group by month for simplicity if we want cards per month)
   const cardsPerMonth = students.reduce((acc, student) => {
