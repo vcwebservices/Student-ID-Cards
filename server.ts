@@ -294,7 +294,7 @@ async function startServer() {
       const pkpassBuffer = await generatePkpass(student, rto);
 
       res.setHeader("Content-Type", "application/vnd.apple.pkpass");
-      res.setHeader("Content-Disposition", `attachment; filename="${student.studentNumber || 'student'}.pkpass"`);
+      res.setHeader("Content-Disposition", `inline; filename="${student.studentNumber || 'student'}.pkpass"`);
       return res.send(pkpassBuffer);
     } catch (err: any) {
       console.error("Apple Wallet pass gen error:", err);

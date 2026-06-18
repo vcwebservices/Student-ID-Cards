@@ -46,24 +46,12 @@ export function PassView() {
           const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream;
           const isAndroid = /android/i.test(userAgent);
           
-          let currentOS: 'ios' | 'android' | 'desktop' = 'desktop';
           if (isIOS) {
-            currentOS = 'ios';
             setOsDetected('ios');
           } else if (isAndroid) {
-            currentOS = 'android';
             setOsDetected('android');
           } else {
             setOsDetected('desktop');
-          }
-
-          // Auto-trigger appropriate add-to-wallet action for mobile devices
-          if (currentOS === 'ios') {
-            triggerAppleAdd(data.student.id);
-          } else if (currentOS === 'android') {
-            triggerAndroidAdd(data.student.id);
-          } else {
-            setShowPrompt(true); // Offer manual buttons on desktop
           }
         } else {
           setError(data.error || 'This Student ID card is invalid or was deactivated.');
@@ -90,7 +78,7 @@ export function PassView() {
       setAddingToWallet(false);
       setAdded(true);
       setShowSuccessModal(true);
-    }, 1500);
+    }, 1200);
   };
 
   // Trigger Google Wallet Action
@@ -105,7 +93,7 @@ export function PassView() {
         setTimeout(() => {
           setAddingToWallet(false);
           setShowGoogleWalletSimulator(true);
-        }, 1500);
+        }, 1200);
       } else {
         throw new Error('Failed to generate Google Wallet object payload.');
       }
@@ -119,7 +107,6 @@ export function PassView() {
 
   const handleManualAdd = (os: 'ios' | 'android') => {
     if (!student) return;
-    setShowPrompt(false);
     if (os === 'ios') {
       triggerAppleAdd(student.id);
     } else {
@@ -169,29 +156,20 @@ export function PassView() {
         style={{ backgroundColor: rto?.primaryColor || '#eab308' }}
       ></div>
 
-      <div className="w-full max-w-[340px] flex justify-between items-center mb-6 text-white z-10">
+      <div className="w-full max-w-[340px] flex justify-between items-center mb-6 text-white z-10 font-sans">
         <button 
           onClick={() => window.close()} 
-          className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/15 flex items-center justify-center text-sm transition-colors border border-white/5 active:scale-95"
+          className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/15 flex items-center justify-center text-sm transition-colors border border-white/5 active:scale-95 animate-fade-in"
         >
           ✕
         </button>
         <span className="font-semibold text-xs uppercase tracking-widest text-gray-400">
           {(rto?.shortName || 'College').toUpperCase()} Student ID
         </span>
-        <button 
-          onClick={() => {
-            if (osDetected === 'ios') triggerAppleAdd(student.id);
-            else if (osDetected === 'android') triggerAndroidAdd(student.id);
-            else setShowPrompt(true);
-          }}
-          className="h-9 px-4 rounded-full bg-white text-black font-semibold text-xs hover:bg-gray-100 transition-colors shadow-sm active:scale-95"
-        >
-          {added ? 'Save Again' : 'Add to Wallet'}
-        </button>
+        <div className="w-10 h-10"></div> {/* Balance spacer */}
       </div>
 
-      <div className="z-10 w-full flex flex-col items-center gap-6">
+      <div className="z-10 w-full flex flex-col items-center gap-6 font-sans">
         {/* Dynamic Verification Badge */}
         <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-full text-green-400 font-medium text-xs shadow-sm shadow-green-500/5 antialiased">
           <CheckCircle2 className="w-3.5 h-3.5" />
@@ -199,9 +177,49 @@ export function PassView() {
         </div>
 
         <StudentCard student={student} isViewMode={true} />
+
+        {/* Unified Direct Inline Save Options Card */}
+        <div className="w-full max-w-[340px] bg-[#1c1c1e] p-5 rounded-2xl shadow-lg border border-white/5 flex flex-col items-center">
+          <h3 className="text-white font-bold text-sm mb-1 text-center">Save to Mobile Wallet</h3>
+          <p className="text-gray-400 text-[11px] text-center mb-4 leading-relaxed">
+            Choose your platform to store this verified ID card for fast access offline.
+          </p>
+          
+          <div className="w-full flex flex-col gap-2.5">
+            {/* Apple Wallet Action */}
+            <button 
+              onClick={() => handleManualAdd('ios')}
+              className="w-full py-3 rounded-xl bg-white text-black hover:bg-gray-150 font-semibold text-xs flex justify-center items-center gap-2 transition-all shadow-sm active:scale-[0.98]"
+            >
+              <svg viewBox="0 0 384 512" className="w-3.5 h-3.5 fill-current" fill="currentColor">
+                <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/>
+              </svg>
+              Add to Apple Wallet
+            </button>
+
+            {/* Google Wallet Action */}
+            <button 
+              onClick={() => handleManualAdd('android')}
+              className="w-full py-3 rounded-xl bg-[#2a2a2c] text-white hover:bg-[#343436] font-semibold text-xs border border-white/5 flex justify-center items-center gap-2 transition-all shadow-sm active:scale-[0.98]"
+            >
+              <svg viewBox="0 0 576 512" className="w-4 h-4 text-[#3DDC84]" fill="currentColor">
+                <path d="M420.2 108.5l46.7-80.9c4.2-7.3 1.7-16.7-5.6-20.9-7.3-4.2-16.7-1.7-20.9 5.6l-48 83.1C355.6 76.5 311 68.2 263.9 68.2c-47.1 0-91.7 8.3-128.4 27.2l-48-83.1c-4.2-7.3-13.6-9.8-20.9-5.6-7.3 4.2-9.8 13.6-5.6 20.9l46.7 80.9C45.3 162.7 0 252.3 0 355.3h527.8c0-103-45.3-192.6-107.6-246.8zM148.6 277.6c-16.7 0-30.3-13.6-30.3-30.3 0-16.7 13.6-30.3 30.3-30.3 16.7 0 30.3 13.6 30.3 30.3 0 16.7-13.6 30.3-30.3 30.3zm230.6 0c-16.7 0-30.3-13.6-30.3-30.3 0-16.7 13.6-30.3 30.3-30.3 16.7 0 30.3 13.6 30.3 30.3 0 16.7-13.6 30.3-30.3 30.3z"/>
+              </svg>
+              Add to Google Wallet
+            </button>
+          </div>
+
+          {/* Safari / WebKit in-app wrapper support block */}
+          <div className="mt-4 border-t border-white/5 pt-3 w-full flex gap-2.5">
+            <HelpCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-gray-400 leading-normal font-normal">
+              <strong>Tip for Scanners:</strong> If your scanning app warns "Safari cannot download this file", tap the <strong>Safari/browser compass icon</strong> at the bottom or top of your screen to relaunch natively, then tap Add.
+            </p>
+          </div>
+        </div>
         
         {rto?.infoText && (
-          <div className="w-full max-w-[340px] bg-[#1c1c1e] text-gray-400 p-5 rounded-2xl text-xs whitespace-pre-wrap leading-relaxed shadow-lg border border-white/5 font-medium">
+          <div className="w-full max-w-[340px] bg-[#1c1c1e] text-gray-500 p-5 rounded-2xl text-xs whitespace-pre-wrap leading-relaxed shadow-lg border border-white/5 font-medium">
             {rto.infoText}
           </div>
         )}
@@ -212,7 +230,7 @@ export function PassView() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[60] flex flex-col items-center justify-center animate-in fade-in duration-300">
           <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-6"></div>
           <p className="text-white font-bold text-lg mb-2">
-            Opening your mobile Wallet
+            Generating Secure Pass
           </p>
           <p className="text-sm text-gray-400 text-center max-w-[240px]">
             Please hold on while we build and transfer your validated Student ID Pass...
@@ -298,7 +316,7 @@ export function PassView() {
                   a.click();
                   document.body.removeChild(a);
                 }}
-                className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex justify-center items-center gap-2' shadow-lg transition-all"
+                className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex justify-center items-center gap-2 shadow-lg transition-all"
               >
                 Add Card to Google Wallet
               </button>
@@ -309,43 +327,6 @@ export function PassView() {
                 Cancel
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manual Choice Prompt (Always loaded for descriptive layout / desktop view) */}
-      {showPrompt && !added && (
-        <div className="fixed bottom-0 left-0 right-0 p-6 bg-[#18181a] rounded-t-[32px] border-t border-white/10 z-50 animate-in slide-in-from-bottom duration-300 flex flex-col items-center shadow-2xl">
-          <div className="w-12 h-1.5 bg-white/15 rounded-full mb-6"></div>
-          <h3 className="text-white font-bold text-xl mb-1 text-center">Add Pass to Mobile Wallet</h3>
-          <p className="text-gray-400 text-sm text-center mb-6 max-w-[300px]">
-            Select your mobile device platform to save your verified student ID.
-          </p>
-          <div className="w-full max-w-sm flex flex-col gap-3">
-            <button 
-              onClick={() => handleManualAdd('ios')}
-              className="w-full py-3.5 rounded-xl bg-white text-black font-semibold text-sm flex justify-center items-center gap-2 hover:bg-gray-100 transition-all shadow-sm active:scale-95"
-            >
-              <svg viewBox="0 0 384 512" className="w-4 h-4 fill-current" fill="currentColor">
-                <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/>
-              </svg>
-              Add to Apple Wallet
-            </button>
-            <button 
-              onClick={() => handleManualAdd('android')}
-              className="w-full py-3.5 rounded-xl bg-[#2a2a2c] text-white font-semibold text-sm border border-white/5 flex justify-center items-center gap-2 hover:bg-[#343436] transition-all shadow-sm active:scale-95"
-            >
-              <svg viewBox="0 0 576 512" className="w-[18px] h-[18px] text-[#3DDC84]" fill="currentColor">
-                <path d="M420.2 108.5l46.7-80.9c4.2-7.3 1.7-16.7-5.6-20.9-7.3-4.2-16.7-1.7-20.9 5.6l-48 83.1C355.6 76.5 311 68.2 263.9 68.2c-47.1 0-91.7 8.3-128.4 27.2l-48-83.1c-4.2-7.3-13.6-9.8-20.9-5.6-7.3 4.2-9.8 13.6-5.6 20.9l46.7 80.9C45.3 162.7 0 252.3 0 355.3h527.8c0-103-45.3-192.6-107.6-246.8zM148.6 277.6c-16.7 0-30.3-13.6-30.3-30.3 0-16.7 13.6-30.3 30.3-30.3 16.7 0 30.3 13.6 30.3 30.3 0 16.7-13.6 30.3-30.3 30.3zm230.6 0c-16.7 0-30.3-13.6-30.3-30.3 0-16.7 13.6-30.3 30.3-30.3 16.7 0 30.3 13.6 30.3 30.3 0 16.7-13.6 30.3-30.3 30.3z"/>
-              </svg>
-              Add to Google Wallet
-            </button>
-            <button
-              onClick={() => setShowPrompt(false)}
-              className="mt-2 text-gray-500 text-xs font-semibold hover:text-white transition-colors"
-            >
-              View Student Card only
-            </button>
           </div>
         </div>
       )}
